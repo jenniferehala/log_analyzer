@@ -6,10 +6,16 @@ Scans a directory tree of Airflow log files (*.log) and reports every
 ERROR-level log entry found, plus the total error count.
 
 Usage:
-    python3 log_analyzer.py <log_dir>
+    python3 log_analyzer.py <log_dir> [--brief]
+
+    --brief   print one line per error (the actual exception, not the
+              full traceback) instead of the full multi-line detail.
+              Optional convenience flag - default output (no flags) is
+              what the assignment asks for.
 
 Example:
     python3 log_analyzer.py ../airflow_mini_project/logs
+    python3 log_analyzer.py ../airflow_mini_project/logs --brief
 """
 from __future__ import annotations
 
@@ -39,6 +45,18 @@ class LogError:
 
     def __str__(self) -> str:
         return f"[{self.timestamp}] {{{self.location}}} ERROR - {self.message}"
+
+    def oneline(self) -> str:
+        """A single-line summary: the last non-blank line of the message.
+
+        For a plain one-line error this is just that line. For a Python
+        traceback, the last line is the actual "ExceptionType: message"
+        summary - the one line that matters - rather than the "Traceback
+        (most recent call last):" header or the call-stack frames above it.
+        """
+        lines = [line.strip() for line in self.message.splitlines() if line.strip()]
+        summary = lines[-1] if lines else "(no message)"
+        return f"[{self.timestamp}] {{{self.location}}} ERROR - {summary}"
 
 
 def analyze_file(file: Path) -> tuple[int, list[LogError]]:
@@ -80,11 +98,15 @@ def analyze_file(file: Path) -> tuple[int, list[LogError]]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(f"usage: {argv[0]} <log_dir>", file=sys.stderr)
+    args = argv[1:]
+    brief = "--brief" in args
+    positional = [a for a in args if a != "--brief"]
+
+    if len(positional) != 1:
+        print(f"usage: {argv[0]} <log_dir> [--brief]", file=sys.stderr)
         return 2
 
-    log_dir = Path(argv[1])
+    log_dir = Path(positional[0])
     if not log_dir.is_dir():
         print(f"error: {log_dir} is not a directory", file=sys.stderr)
         return 2
@@ -100,7 +122,7 @@ def main(argv: list[str]) -> int:
     print(f"Total number of errors: {total_count}")
     print("Here are all the errors:")
     for err in all_errors:
-        print(err)
+        print(err.oneline() if brief else err)
 
     return 0
 
